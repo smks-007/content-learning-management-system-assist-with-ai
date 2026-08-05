@@ -1,0 +1,1 @@
+import{j as t}from"./index-Cm_8sblt.js";const d=({children:r,className:a="",hover:s=!1,...o})=>t.jsx("div",{className:`card ${s?"hover:-translate-y-1 hover:shadow-lg dark:hover:shadow-primary-500/10 transition-all duration-300":""} ${a}`,...o,children:r});export{d as C};

@@ -1,0 +1,129 @@
+version: '3.9'
+
+services:
+  # ─── PostgreSQL ───────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: clms_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clmsdb
+      POSTGRES_USER: ${DB_USERNAME:-clms_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-clms_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    networks:
+      - clms_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-clms_user} -d clmsdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Ollama (AI) ──────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: clms_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - clms_network
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ─── Model Puller (runs once to pull llama3) ──────────────────
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: clms_ollama_pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c", "ollama pull ${AI_MODEL:-llama3}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    networks:
+      - clms_network
+    restart: "no"
+
+  # ─── Spring Boot Backend ──────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: clms_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_USERNAME: ${DB_USERNAME:-clms_user}
+      DB_PASSWORD: ${DB_PASSWORD:-clms_pass}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/clmsdb
+      OLLAMA_BASE_URL: http://ollama:11434
+      AI_MODEL: ${AI_MODEL:-llama3}
+      JWT_SECRET: ${JWT_SECRET:-clms-super-secret-jwt-key-change-in-production-min32}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      FILE_UPLOAD_DIR: /app/uploads
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      SPRING_PROFILES_ACTIVE: prod
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads_data:/app/uploads
+    networks:
+      - clms_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ─── React Frontend (Nginx) ───────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: clms_frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - clms_network
+
+volumes:
+  postgres_data:
+    driver: local
+  ollama_data:
+    driver: local
+  uploads_data:
+    driver: local
+
+networks:
+  clms_network:
+    driver: bridge

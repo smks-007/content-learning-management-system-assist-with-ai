@@ -1,0 +1,48 @@
+server:
+  port: 8080
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/clmsdb
+    username: ${DB_USERNAME:clms_user}
+    password: ${DB_PASSWORD:clms_pass}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  ai:
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        model: ${AI_MODEL:llama3}
+        options:
+          temperature: 0.7
+          num-predict: 2048
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+app:
+  jwt:
+    secret: ${JWT_SECRET:clms-secret-key-must-be-at-least-32-chars-long-for-hs256}
+    expiration: 900000
+    refresh-expiration: 604800000
+  file:
+    upload-dir: ${FILE_UPLOAD_DIR:./uploads}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
